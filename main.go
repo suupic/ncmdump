@@ -168,56 +168,62 @@ func processFile(name string) {
 	err = json.Unmarshal(deData, &meta)
 	checkError(err)
 
-	// crc32 check
-	fp.Seek(4, 1)
-	fp.Seek(5, 1)
-
-	imgLen := readUint32(rBuf, fp)
-
-	imgData := func() []byte {
-		if imgLen > 0 {
-			data := make([]byte, imgLen)
-			_, err = fp.Read(data)
-			checkError(err)
-			return data
-		}
-		return nil
-	}()
-
-	box := buildKeyBox(deKeyData)
-	n := 0x8000
-
 	outputName := strings.Replace(name, ".ncm", "."+meta.Format, -1)
+	if _, err := os.Stat(outputName); err == nil {
+		log.Println(name, " ...Skipped[output file exist]")
+	} else {
+		// crc32 check
+		fp.Seek(4, 1)
+		fp.Seek(5, 1)
 
-	fpOut, err := os.OpenFile(outputName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
-	checkError(err)
+		imgLen := readUint32(rBuf, fp)
 
-	var tb = make([]byte, n)
-	for {
-		_, err := fp.Read(tb)
-		if err == io.EOF { // read EOF
-			break
-		} else if err != nil {
-			log.Println(err)
+		imgData := func() []byte {
+			if imgLen > 0 {
+				data := make([]byte, imgLen)
+				_, err = fp.Read(data)
+				checkError(err)
+				return data
+			}
+			return nil
+		}()
+
+		box := buildKeyBox(deKeyData)
+		n := 0x8000
+
+		// outputName := strings.Replace(name, ".ncm", "."+meta.Format, -1)
+
+		fpOut, err := os.OpenFile(outputName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+		checkError(err)
+
+		var tb = make([]byte, n)
+		for {
+			_, err := fp.Read(tb)
+			if err == io.EOF { // read EOF
+				break
+			} else if err != nil {
+				log.Println(err)
+			}
+			for i := 0; i < n; i++ {
+				j := byte((i + 1) & 0xff)
+				tb[i] ^= box[(box[j]+box[(box[j]+j)&0xff])&0xff]
+			}
+			_, err = fpOut.Write(tb)
+			if err != nil {
+				log.Println(err)
+			}
 		}
-		for i := 0; i < n; i++ {
-			j := byte((i + 1) & 0xff)
-			tb[i] ^= box[(box[j]+box[(box[j]+j)&0xff])&0xff]
-		}
-		_, err = fpOut.Write(tb)
-		if err != nil {
-			log.Println(err)
+		fpOut.Close()
+
+		log.Println("processing：", outputName)
+		switch meta.Format {
+		case "mp3":
+			addMP3Tag(outputName, imgData, &meta)
+		case "flac":
+			addFLACTag(outputName, imgData, &meta)
 		}
 	}
-	fpOut.Close()
 
-	log.Println(outputName)
-	switch meta.Format {
-	case "mp3":
-		addMP3Tag(outputName, imgData, &meta)
-	case "flac":
-		addFLACTag(outputName, imgData, &meta)
-	}
 }
 
 func fetchUrl(url string) []byte {
@@ -422,6 +428,44 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 	}
 }
 
+
+func nestedCheckingFiles(path string)(files []string){
+	if info, err := os.Stat(path); err != nil {
+		log.Fatalf("Path %s does not exist.", info)
+	} else if info.IsDir() {
+		filelist, err := ioutil.ReadDir(path)
+
+		if err != nil {
+			log.Fatalf("Error while reading %s: %s", path, err.Error())
+		}
+		for _, f := range filelist {
+			if f.IsDir() == true {
+				log.Println(f.Name(), "  Searching... ")
+				subDirFiles := make([]string, 0)
+				subDirFiles = nestedCheckingFiles(filepath.Join(path, "./", f.Name()))
+				for _, subfilename := range subDirFiles {
+					files = append(files, subfilename)
+				}
+			} else {
+				log.Println("    ", f.Name(), " ...Found")
+				files = append(files, filepath.Join(path, "./", f.Name()))
+			}
+		}
+	} else {
+		files = append(files, path)
+	}
+
+	// for _, filename := range files {
+	// 	if filepath.Ext(filename) == ".ncm" {
+	// 		processFile(filename)
+	// 	} else {
+	// 		// log.Printf("Skipping %s: not ncm file\n", filename)
+	// 	}
+	// }	
+	return files
+}
+
+
 func main() {
 	argc := len(os.Args)
 	if argc <= 1 {
@@ -432,26 +476,15 @@ func main() {
 
 	for i := 0; i < argc-1; i++ {
 		path := os.Args[i+1]
-		if info, err := os.Stat(path); err != nil {
-			log.Fatalf("Path %s does not exist.", info)
-		} else if info.IsDir() {
-			filelist, err := ioutil.ReadDir(path)
-			if err != nil {
-				log.Fatalf("Error while reading %s: %s", path, err.Error())
-			}
-			for _, f := range filelist {
-				files = append(files, filepath.Join(path, "./", f.Name()))
-			}
-		} else {
-			files = append(files, path)
-		}
+
+		files = nestedCheckingFiles(path)
 	}
 
 	for _, filename := range files {
 		if filepath.Ext(filename) == ".ncm" {
 			processFile(filename)
 		} else {
-			log.Printf("Skipping %s: not ncm file\n", filename)
+			log.Println(filename, " ...Skipped[not ncm file]")
 		}
 	}
 
