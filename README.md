@@ -14,37 +14,27 @@
 ## 如何使用？
 
 - 使用命令ncmdump
-
+```
     NAME:
-
     NCMDump - Covert Neteast Cloud Music's .ncm file to .flac or .mp3 format
 
     USAGE:
-
     ncmdump.exe [global options] command [command options] [arguments...]
 
     VERSION:
-
     0.3.0
 
     COMMANDS:
-
         help, h  Shows a list of commands or help for one command
 
     GLOBAL OPTIONS:
-
     --force, -f             force to process .ncm which is already coverted
-
     --input PATH, -i PATH   input PATH of .ncm files
-
     --output PATH, -o PATH  output PATH of coverted files
-
     --recursive, -r         recursive sub directories
-
     --help, -h              show help
-
     --version, -v           show the version    
-
+```
 ## 感谢
 
 - [@anonymous5l](https://github.com/anonymous5l)提供的原版ncmdump
