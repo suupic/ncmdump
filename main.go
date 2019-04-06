@@ -484,13 +484,13 @@ func dump(input string, output string, isForce bool, isRecursive bool) {
 
 func main() {
 	cli.VersionFlag = cli.BoolFlag{
-		Name:  "print-version, V",
-		Usage: "print only the version",
+		Name:  "version, v",
+		Usage: "show the version",
 	}
 
 	app := cli.NewApp()
 	app.Name = "NCMDump"
-	app.Version = "0.0.2"
+	app.Version = "0.3.0"
 	app.Compiled = time.Now()
 	app.Usage = "Covert Neteast Cloud Music's .ncm file to .flac or .mp3 format"
 
@@ -528,7 +528,7 @@ func main() {
 	sort.Sort(cli.CommandsByName(app.Commands))
 
 	app.CommandNotFound = func(c *cli.Context, command string) {
-		fmt.Fprintf(c.App.Writer, "No command found: %q.\n", command)
+		fmt.Fprintf(c.App.Writer, "Command not found: %q.\n", command)
 	}
 
 	app.Action = func(c *cli.Context) error {
