@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +22,8 @@ import (
 	"github.com/go-flac/go-flac"
 
 	"github.com/bogem/id3v2"
+
+	"github.com/urfave/cli"
 )
 
 //
@@ -28,6 +32,7 @@ var (
 	aesModifyKey = []byte{0x23, 0x31, 0x34, 0x6C, 0x6A, 0x6B, 0x5F, 0x21, 0x5C, 0x5D, 0x26, 0x30, 0x55, 0x3C, 0x27, 0x28}
 )
 
+// MetaInfo of music
 type MetaInfo struct {
 	MusicID       int             `json:"musicId"`
 	MusicName     string          `json:"musicName"`
@@ -107,7 +112,7 @@ func checkError(err error) {
 	}
 }
 
-func processFile(name string) {
+func processFile(name string, output string, isForce bool) {
 	fp, err := os.Open(name)
 	if err != nil {
 		log.Println(err)
@@ -169,7 +174,14 @@ func processFile(name string) {
 	checkError(err)
 
 	outputName := strings.Replace(name, ".ncm", "."+meta.Format, -1)
+
+	var isTargetFileExist bool
 	if _, err := os.Stat(outputName); err == nil {
+		isTargetFileExist = true
+	} else {
+		isTargetFileExist = false
+	}
+	if isTargetFileExist && (isForce == false) {
 		log.Println(name, " ...Skipped[output file exist]")
 	} else {
 		// crc32 check
@@ -190,8 +202,6 @@ func processFile(name string) {
 
 		box := buildKeyBox(deKeyData)
 		n := 0x8000
-
-		// outputName := strings.Replace(name, ".ncm", "."+meta.Format, -1)
 
 		fpOut, err := os.OpenFile(outputName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
 		checkError(err)
@@ -226,7 +236,7 @@ func processFile(name string) {
 
 }
 
-func fetchUrl(url string) []byte {
+func fetchURL(url string) []byte {
 	req, err := http.NewRequest("GET", url, bytes.NewBuffer([]byte{}))
 	if err != nil {
 		log.Println(err)
@@ -261,7 +271,7 @@ func addFLACTag(fileName string, imgData []byte, meta *MetaInfo) {
 	}
 
 	if imgData == nil && meta.AlbumPic != "" {
-		imgData = fetchUrl(meta.AlbumPic)
+		imgData = fetchURL(meta.AlbumPic)
 	}
 
 	if imgData != nil {
@@ -363,7 +373,7 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 	defer tag.Close()
 
 	if imgData == nil && meta.AlbumPic != "" {
-		imgData = fetchUrl(meta.AlbumPic)
+		imgData = fetchURL(meta.AlbumPic)
 	}
 
 	if imgData != nil {
@@ -428,11 +438,11 @@ func addMP3Tag(fileName string, imgData []byte, meta *MetaInfo) {
 	}
 }
 
-
-func nestedCheckingFiles(path string)(files []string){
+func nestedCheckingFiles(path string, isRecursive bool) (files []string) {
 	if info, err := os.Stat(path); err != nil {
-		log.Fatalf("Path %s does not exist.", info)
+		log.Fatalf("Path %s does not exist.", path)
 	} else if info.IsDir() {
+		log.Println(path, "  Searching... ")
 		filelist, err := ioutil.ReadDir(path)
 
 		if err != nil {
@@ -440,11 +450,12 @@ func nestedCheckingFiles(path string)(files []string){
 		}
 		for _, f := range filelist {
 			if f.IsDir() == true {
-				log.Println(f.Name(), "  Searching... ")
-				subDirFiles := make([]string, 0)
-				subDirFiles = nestedCheckingFiles(filepath.Join(path, "./", f.Name()))
-				for _, subfilename := range subDirFiles {
-					files = append(files, subfilename)
+				if isRecursive {
+					subDirFiles := make([]string, 0)
+					subDirFiles = nestedCheckingFiles(filepath.Join(path, "./", f.Name()), isRecursive)
+					for _, subfilename := range subDirFiles {
+						files = append(files, subfilename)
+					}
 				}
 			} else {
 				log.Println("    ", f.Name(), " ...Found")
@@ -455,37 +466,81 @@ func nestedCheckingFiles(path string)(files []string){
 		files = append(files, path)
 	}
 
-	// for _, filename := range files {
-	// 	if filepath.Ext(filename) == ".ncm" {
-	// 		processFile(filename)
-	// 	} else {
-	// 		// log.Printf("Skipping %s: not ncm file\n", filename)
-	// 	}
-	// }	
 	return files
 }
 
-
-func main() {
-	argc := len(os.Args)
-	if argc <= 1 {
-		log.Println("please input file path!")
-		return
-	}
+func dump(input string, output string, isForce bool, isRecursive bool) {
 	files := make([]string, 0)
-
-	for i := 0; i < argc-1; i++ {
-		path := os.Args[i+1]
-
-		files = nestedCheckingFiles(path)
-	}
+	files = nestedCheckingFiles(input, isRecursive)
 
 	for _, filename := range files {
 		if filepath.Ext(filename) == ".ncm" {
-			processFile(filename)
+			processFile(filename, output, isForce)
 		} else {
 			log.Println(filename, " ...Skipped[not ncm file]")
 		}
 	}
+}
 
+func main() {
+	cli.VersionFlag = cli.BoolFlag{
+		Name:  "print-version, V",
+		Usage: "print only the version",
+	}
+
+	app := cli.NewApp()
+	app.Name = "NCMDump"
+	app.Version = "0.0.2"
+	app.Compiled = time.Now()
+	app.Usage = "Covert Neteast Cloud Music's .ncm file to .flac or .mp3 format"
+
+	var isRecursive bool
+	var isForce bool
+	var input string
+	var output string
+
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:        "recursive, r",
+			Usage:       "recursive sub directories",
+			Destination: &isRecursive,
+		},
+		cli.BoolFlag{
+			Name:        "force, f",
+			Usage:       "force to process .ncm which is already coverted",
+			Destination: &isForce,
+		},
+		cli.StringFlag{
+			Name:        "input, i",
+			Usage:       "input `PATH` of .ncm files",
+			Destination: &input,
+		},
+		cli.StringFlag{
+			Name:        "output, o",
+			Usage:       "output `PATH` of coverted files",
+			Destination: &output,
+		},
+	}
+
+	app.Commands = []cli.Command{}
+
+	sort.Sort(cli.FlagsByName(app.Flags))
+	sort.Sort(cli.CommandsByName(app.Commands))
+
+	app.CommandNotFound = func(c *cli.Context, command string) {
+		fmt.Fprintf(c.App.Writer, "No command found: %q.\n", command)
+	}
+
+	app.Action = func(c *cli.Context) error {
+		if input == "" {
+			cli.ShowAppHelp(c)
+		} else {
+			dump(input, output, isForce, isRecursive)
+		}
+		return nil
+	}
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
