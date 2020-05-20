@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -112,7 +113,60 @@ func checkError(err error) {
 	}
 }
 
-func processFile(name string, output string, isForce bool) {
+func copyFile(name string, outputPath string, basePath string, isForce bool) bool {
+	if name != "" && basePath != "" {
+		outputName := strings.Replace(name, basePath, outputPath, -1) // 输出到-o参数路径
+
+		if checkFileExist(outputName) {
+			log.Println(name, " ...Skipped[output file exist]")
+		} else {
+			outputDir, _ := path.Split(filepath.ToSlash(outputName))
+			os.MkdirAll(outputDir, os.ModePerm)
+			log.Print("copy to ", outputName)
+
+			fpSrc, err := os.Open(name)
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			defer fpSrc.Close()
+
+			fpDest, err := os.OpenFile(outputName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0666)
+			checkError(err)
+
+			defer fpDest.Close()
+
+			io.Copy(fpDest, fpSrc)
+		}
+	}
+
+	return true
+
+}
+
+func decideOutputName(name string, ext string, outputPath string, basePath string, isForce bool) string {
+	var outputDir string
+	outputName := strings.Replace(name, ".ncm", ext, -1)
+	if outputPath != "" && basePath != "" {
+		outputName = strings.Replace(outputName, basePath, outputPath, -1) // 输出到-o参数路径
+		outputDir, _ = path.Split(filepath.ToSlash(outputName))
+		os.MkdirAll(outputDir, os.ModePerm)
+		log.Print("decode to: ", outputName)
+	}
+	return outputName
+}
+
+func checkFileExist(name string) bool {
+	var isTargetFileExist bool
+	if _, err := os.Stat(name); err == nil {
+		isTargetFileExist = true
+	} else {
+		isTargetFileExist = false
+	}
+	return isTargetFileExist
+}
+
+func processFile(name string, outputPath string, basePath string, isForce bool) {
 	fp, err := os.Open(name)
 	if err != nil {
 		log.Println(err)
@@ -173,15 +227,10 @@ func processFile(name string, output string, isForce bool) {
 	err = json.Unmarshal(deData, &meta)
 	checkError(err)
 
-	outputName := strings.Replace(name, ".ncm", "."+meta.Format, -1)
+	ext := "." + meta.Format // 扩展名
+	outputName := decideOutputName(name, ext, outputPath, basePath, isForce)
 
-	var isTargetFileExist bool
-	if _, err := os.Stat(outputName); err == nil {
-		isTargetFileExist = true
-	} else {
-		isTargetFileExist = false
-	}
-	if isTargetFileExist && (isForce == false) {
+	if checkFileExist(outputName) && (isForce == false) {
 		log.Println(name, " ...Skipped[output file exist]")
 	} else {
 		// crc32 check
@@ -469,15 +518,19 @@ func nestedCheckingFiles(path string, isRecursive bool) (files []string) {
 	return files
 }
 
-func dump(input string, output string, isForce bool, isRecursive bool) {
+func dump(input string, outputPath string, basePath string, isForce bool, isRecursive bool) {
 	files := make([]string, 0)
 	files = nestedCheckingFiles(input, isRecursive)
 
 	for _, filename := range files {
 		if filepath.Ext(filename) == ".ncm" {
-			processFile(filename, output, isForce)
+			processFile(filename, outputPath, basePath, isForce)
 		} else {
-			log.Println(filename, " ...Skipped[not ncm file]")
+			if outputPath != "" && basePath != "" {
+				copyFile(filename, outputPath, basePath, isForce)
+			} else {
+				log.Println(filename, " ...Skipped")
+			}
 		}
 	}
 }
@@ -494,12 +547,18 @@ func main() {
 	app.Compiled = time.Now()
 	app.Usage = "Covert Neteast Cloud Music's .ncm file to .flac or .mp3 format"
 
+	var basePath string
 	var isRecursive bool
 	var isForce bool
-	var input string
-	var output string
+	var input string // path or filenmae
+	var outputPath string
 
 	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:        "base path, b",
+			Usage:       "base path of resources",
+			Destination: &basePath,
+		},
 		cli.BoolFlag{
 			Name:        "recursive, r",
 			Usage:       "recursive sub directories",
@@ -518,7 +577,7 @@ func main() {
 		cli.StringFlag{
 			Name:        "output, o",
 			Usage:       "output `PATH` of coverted files",
-			Destination: &output,
+			Destination: &outputPath,
 		},
 	}
 
@@ -535,7 +594,7 @@ func main() {
 		if input == "" {
 			cli.ShowAppHelp(c)
 		} else {
-			dump(input, output, isForce, isRecursive)
+			dump(input, outputPath, basePath, isForce, isRecursive)
 		}
 		return nil
 	}
