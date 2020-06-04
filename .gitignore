@@ -2,4 +2,5 @@ debug
 dev
 go.sum
 *.exe
+*.wasm
 .vscode

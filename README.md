@@ -7,8 +7,8 @@
 ## 新特性
 
 1. 支持子目录遍历
-2. 支持跳过处理已转化过的ncm文件
-3. 支持指定输出目录[TODO]
+2. 允许跳过处理已转化过的ncm文件
+3. 支持输出到新的目录并保持原目录结构
 4. 更友好的CLI命令行
 
 ## 如何使用？
@@ -22,13 +22,14 @@
     ncmdump.exe [global options] command [command options] [arguments...]
 
     VERSION:
-    0.4.0
+    0.3.1
 
     COMMANDS:
         help, h  Shows a list of commands or help for one command
 
     GLOBAL OPTIONS:
-    --force, -f             force to process .ncm which is already coverted
+    --base path BASE PATH, -b BASE PATH  BASE PATH of resources
+    --force, -f             force to process .ncm which has already coverted
     --input PATH, -i PATH   input PATH of .ncm files
     --output PATH, -o PATH  output PATH of coverted files
     --recursive, -r         recursive sub directories
@@ -38,7 +39,7 @@
 
 ## Example
 ```
-ncmdump.exe -r -i "J:\CloudMusic" -o "j:\output"  -b "J:\CloudMusic"
+ncmdump.exe -r -i "J:\CloudMusic" -b "J:\CloudMusic" -o "j:\output"  
 ```
 ## 感谢
 

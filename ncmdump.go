@@ -501,14 +501,14 @@ func nestedCheckingFiles(path string, isRecursive bool) (files []string) {
 			if f.IsDir() == true {
 				if isRecursive {
 					subDirFiles := make([]string, 0)
-					subDirFiles = nestedCheckingFiles(filepath.Join(path, "./", f.Name()), isRecursive)
+					subDirFiles = nestedCheckingFiles(filepath.Join(path, string(filepath.Separator), f.Name()), isRecursive)
 					for _, subfilename := range subDirFiles {
 						files = append(files, subfilename)
 					}
 				}
 			} else {
 				log.Println("    ", f.Name(), " ...Found")
-				files = append(files, filepath.Join(path, "./", f.Name()))
+				files = append(files, filepath.Join(path, string(filepath.Separator), f.Name()))
 			}
 		}
 	} else {
@@ -543,7 +543,7 @@ func main() {
 
 	app := cli.NewApp()
 	app.Name = "NCMDump"
-	app.Version = "0.3.0"
+	app.Version = "0.3.1"
 	app.Compiled = time.Now()
 	app.Usage = "Covert Neteast Cloud Music's .ncm file to .flac or .mp3 format"
 
@@ -556,7 +556,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:        "base path, b",
-			Usage:       "base path of resources",
+			Usage:       "`BASE PATH` of resources",
 			Destination: &basePath,
 		},
 		cli.BoolFlag{
