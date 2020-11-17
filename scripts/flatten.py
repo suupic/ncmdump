@@ -34,6 +34,5 @@ print("target_dir: ", target_dir)
 
 for dir in os.listdir(root_dir):
     if(os.path.isdir(dir)):
-        dir_path = dir #os.path.abspath(dir)
-        print("  process dir: ", dir_path)
-        flatten(dir_path, dir_path, target_dir)
+        print("  process dir: ", dir)
+        flatten(dir, dir, target_dir)
